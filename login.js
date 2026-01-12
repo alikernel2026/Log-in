@@ -1,3 +1,26 @@
+// وظيفة لتحميل سكربت جوجل برمجياً
+function loadGoogleScript() {
+  const script = document.createElement('script');
+  script.src = 'https://accounts.google.com/gsi/client';
+  script.async = true;
+  script.defer = true;
+  script.onload = () => {
+    console.log('Google Script Loaded Successfully');
+    // هنا تبدأ تشغيل وظائف سجل الدخول
+  };
+  script.onerror = () => {
+    console.error('Failed to load Google script - Check your internet or URL');
+  };
+  document.head.appendChild(script);
+}
+
+loadGoogleScript();
+
+
+
+
+
+
 (function() {
     // --- الرجوع لإخفاء html كما طلبت ---
     const antiFlickerStyle = document.createElement('style');
@@ -742,3 +765,4 @@
         new SupabaseAuthManager();
     }
 })();
+
