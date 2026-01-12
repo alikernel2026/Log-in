@@ -744,3 +744,16 @@
     }
 })();
 
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    if (url.pathname === '/.well-known/web-identity') {
+      return new Response(JSON.stringify({
+        "provider_urls": ["https://accounts.google.com/gsi/fedcm.json"]
+      }), {
+        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" }
+      });
+    }
+    return fetch(request);
+  }
+};
