@@ -20,11 +20,11 @@
             this.config = {
                 url: "https://rxevykpywwbqfozjgxti.supabase.co",
                 key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4ZXZ5a3B5d3dicWZvempneHRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2NzAxNjQsImV4cCI6MjA4MjI0NjE2NH0.93uW6maT-L23GQ77HxJoihjIG-DTmciDQlPE3s0b64U",
-                googleClientId: "72689337956-olguuh15bua77gq17frsim0o79dj63dq.apps.googleusercontent.com",
+                googleClientId: "617149480177-aimcujc67q4307sk43li5m6pr54vj1jv.apps.googleusercontent.com",
                 paths: { 
                     home: "/", 
                     account: "/p/account.html", 
-                    login: "/p/blog-page_27.html" 
+                    login: "/p/login.html" 
                 }
             };
 
