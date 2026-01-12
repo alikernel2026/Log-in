@@ -1,10 +1,10 @@
 (function() {
-    // --- الإصلاح: إخفاء الصفحة عالمياً لمنع الوميض في جميع الصفحات ---
+    // --- الرجوع لإخفاء html كما طلبت ---
     const antiFlickerStyle = document.createElement('style');
     antiFlickerStyle.id = 'anti-flicker';
     antiFlickerStyle.textContent = 'html { visibility: hidden !important; }';
     (document.head || document.documentElement).appendChild(antiFlickerStyle);
-    // --------------------------------------------------------------
+    // -------------------------------------
 
     class SupabaseAuthManager {
         constructor() {
@@ -15,17 +15,27 @@
             this.globalChannel = null;
             this.initializationAttempts = 0;
             this.maxRetries = 3;
+            this.pageRevealed = false; // متغير جديد لتتبع ما إذا كانت الصفحة ظهرت
 
             this.config = {
                 url: "https://rxevykpywwbqfozjgxti.supabase.co",
                 key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4ZXZ5a3B5d3dicWZvempneHRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2NzAxNjQsImV4cCI6MjA4MjI0NjE2NH0.93uW6maT-L23GQ77HxJoihjIG-DTmciDQlPE3s0b64U",
-                googleClientId: "617149480177-aimcujc67q4307sk43li5m6pr54vj1jv.apps.googleusercontent.com",
+                googleClientId: "72689337956-olguuh15bua77gq17frsim0o79dj63dq.apps.googleusercontent.com",
                 paths: { 
                     home: "/", 
                     account: "/p/account.html", 
-                    login: "/p/login.html" 
+                    login: "/p/blog-page_27.html" 
                 }
             };
+
+            // --- شبكة الأمان: إظهار الصفحة بالقوة بعد 4 ثوانٍ إذا فشل الكود ---
+            this.safetyTimer = setTimeout(() => {
+                if (!this.pageRevealed) {
+                    console.warn('Safety Timer Triggered: Forcing page reveal to prevent black screen.');
+                    this.revealPage();
+                }
+            }, 4000);
+            // ---------------------------------------------------------------------------------------
 
             this.icons = {
                 clock: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v6l4 2"></path><circle cx="12" cy="12" r="10"></circle></svg>',
@@ -104,7 +114,9 @@
                 const headerReady = this.updateHeaderUI(user);
                 
                 if (user) {
-                    await this.handleSessionSync(user);
+                    // تشغيل المزامنة في الخلفية
+                    this.handleSessionSync(user).catch(e => console.log('Background sync error', e));
+                    
                     this.startGlobalSessionMonitoring(user);
                     
                     if (path.includes(this.config.paths.account)) {
@@ -151,10 +163,9 @@
                     }
 
                     return new Promise(resolve => {
-                        // انتظار تحميل الصورة قبل إظهار الصفحة لمنع الوميض
                         const timeout = setTimeout(() => {
                             resolve();
-                        }, 3000);
+                        }, 2000); 
 
                         av.onload = () => {
                             clearTimeout(timeout);
@@ -320,10 +331,19 @@
 
         revealPage() {
             try {
+                if (this.pageRevealed) return; // منع الظهور المتكرر
+                this.pageRevealed = true;
+                
+                // إيقاف المؤقت الأمني
+                if (this.safetyTimer) {
+                    clearTimeout(this.safetyTimer);
+                }
+
                 const style = document.getElementById('anti-flicker');
                 if (style && style.parentNode) {
                     style.parentNode.removeChild(style);
                 }
+                // الرجوع لإظهار html كما طلبت
                 document.documentElement.style.visibility = 'visible';
             } catch (error) {
                 console.error('خطأ في إظهار الصفحة:', error);
@@ -621,7 +641,7 @@
         async fetchIP() {
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                const timeoutId = setTimeout(() => controller.abort(), 3000); 
                 const res = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
                 clearTimeout(timeoutId);
                 if (!res.ok) throw new Error('فشل جلب IP');
