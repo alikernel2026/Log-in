@@ -112,7 +112,6 @@
                         this.startLiveDeviceSync(user);
                     }
                 } else {
-                    // تحميل Google GSI ديناميكياً فوراً
                     this.loadGoogleGSI();
                 }
 
@@ -133,7 +132,6 @@
             }
         }
 
-        // تحميل Google GSI ديناميكياً - يعمل فوراً
         loadGoogleGSI() {
             if (window.google?.accounts?.id) {
                 this.setupGoogleOneTap();
@@ -689,7 +687,7 @@
 
                 google.accounts.id.initialize({
                     client_id: this.config.googleClientId,
-                    use_fedcm_for_prompt: true,
+                    use_fedcm_for_prompt: false,
                     callback: async (response) => {
                         try {
                             const { error } = await this.supabase.auth.signInWithIdToken({
