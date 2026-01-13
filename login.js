@@ -1,9 +1,4 @@
 (function() {
-    // --- الرجوع لإخفاء html كما طلبت ---
-    antiFlickerStyle.textContent = 'html { visibility: hidden !important; }';
-    (document.head || document.documentElement).appendChild(antiFlickerStyle);
-    // -------------------------------------
-
     class SupabaseAuthManager {
         constructor() {
             window.supabaseAuth = this;
@@ -741,3 +736,4 @@
         new SupabaseAuthManager();
     }
 })();
+
