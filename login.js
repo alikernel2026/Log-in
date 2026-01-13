@@ -8,9 +8,9 @@
             this.globalChannel = null;
             this.initializationAttempts = 0;
             this.maxRetries = 3;
-            this.pageRevealed = false; // متغير جديد لتتبع ما إذا كانت الصفحة ظهرت
+            this.pageRevealed = false;
 
-                        this.config = {
+            this.config = {
                 url: "https://rxevykpywwbqfozjgxti.supabase.co",
                 key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4ZXZ5a3B5d3dicWZvempneHRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2NzAxNjQsImV4cCI6MjA4MjI0NjE2NH0.93uW6maT-L23GQ77HxJoihjIG-DTmciDQlPE3s0b64U",
                 googleClientId: "617149480177-aimcujc67q4307sk43li5m6pr54vj1jv.apps.googleusercontent.com",
@@ -21,15 +21,11 @@
                 }
             };
 
-
-            // --- شبكة الأمان: إظهار الصفحة بالقوة بعد 4 ثوانٍ إذا فشل الكود ---
             this.safetyTimer = setTimeout(() => {
                 if (!this.pageRevealed) {
-                    console.warn('Safety Timer Triggered: Forcing page reveal to prevent black screen.');
                     this.revealPage();
                 }
             }, 4000);
-            // ---------------------------------------------------------------------------------------
 
             this.icons = {
                 clock: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v6l4 2"></path><circle cx="12" cy="12" r="10"></circle></svg>',
@@ -108,9 +104,7 @@
                 const headerReady = this.updateHeaderUI(user);
                 
                 if (user) {
-                    // تشغيل المزامنة في الخلفية
                     this.handleSessionSync(user).catch(e => console.log('Background sync error', e));
-                    
                     this.startGlobalSessionMonitoring(user);
                     
                     if (path.includes(this.config.paths.account)) {
@@ -118,7 +112,8 @@
                         this.startLiveDeviceSync(user);
                     }
                 } else {
-                    this.setupGoogleOneTap();
+                    // تحميل Google GSI ديناميكياً فوراً
+                    this.loadGoogleGSI();
                 }
 
                 this.bindUserActions();
@@ -136,6 +131,20 @@
                     this.revealPage();
                 }
             }
+        }
+
+        // تحميل Google GSI ديناميكياً - يعمل فوراً
+        loadGoogleGSI() {
+            if (window.google?.accounts?.id) {
+                this.setupGoogleOneTap();
+                return;
+            }
+
+            const script = document.createElement('script');
+            script.src = 'https://accounts.google.com/gsi/client';
+            script.async = true;
+            script.onload = () => this.setupGoogleOneTap();
+            document.head.appendChild(script);
         }
 
         async updateHeaderUI(user) {
@@ -325,10 +334,9 @@
 
         revealPage() {
             try {
-                if (this.pageRevealed) return; // منع الظهور المتكرر
+                if (this.pageRevealed) return;
                 this.pageRevealed = true;
                 
-                // إيقاف المؤقت الأمني
                 if (this.safetyTimer) {
                     clearTimeout(this.safetyTimer);
                 }
@@ -337,7 +345,6 @@
                 if (style && style.parentNode) {
                     style.parentNode.removeChild(style);
                 }
-                // الرجوع لإظهار html كما طلبت
                 document.documentElement.style.visibility = 'visible';
             } catch (error) {
                 console.error('خطأ في إظهار الصفحة:', error);
@@ -358,16 +365,12 @@
                 if (this.channel) {
                     try {
                         this.supabase.removeChannel(this.channel);
-                    } catch (error) {
-                        console.error('خطأ في تنظيف القناة:', error);
-                    }
+                    } catch (error) {}
                 }
                 if (this.globalChannel) {
                     try {
                         this.supabase.removeChannel(this.globalChannel);
-                    } catch (error) {
-                        console.error('خطأ في تنظيف القناة العالمية:', error);
-                    }
+                    } catch (error) {}
                 }
             });
         }
@@ -473,7 +476,6 @@
                 
                 return 'fp_' + Math.abs(hash).toString(36);
             } catch (error) {
-                console.error('خطأ في إنشاء البصمة:', error);
                 return 'fp_fallback_' + Date.now().toString(36);
             }
         }
@@ -507,7 +509,6 @@
                         .eq('id', sessionId);
                     
                     localStorage.setItem("supabaseSessionId", sessionId);
-                    console.log('تم استعادة وتحديث الجلسة القديمة');
                 } else {
                     const ip = await this.fetchIP();
                     const domain = window.location.hostname;
@@ -531,7 +532,6 @@
 
                     if (newSession && newSession[0]) {
                         localStorage.setItem("supabaseSessionId", newSession[0].id);
-                        console.log('تم إنشاء جلسة جديدة بنجاح');
                     }
                 }
             } catch (error) {
@@ -583,7 +583,6 @@
                         table: 'sessions',
                         filter: `id=eq.${sid}`
                     }, () => {
-                        console.log('تم حذف جلستك من موقع آخر');
                         this.handleSmartRedirect();
                     })
                     .subscribe();
@@ -690,6 +689,7 @@
 
                 google.accounts.id.initialize({
                     client_id: this.config.googleClientId,
+                    use_fedcm_for_prompt: true,
                     callback: async (response) => {
                         try {
                             const { error } = await this.supabase.auth.signInWithIdToken({
@@ -736,5 +736,3 @@
         new SupabaseAuthManager();
     }
 })();
-
-
