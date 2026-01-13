@@ -1,7 +1,5 @@
 (function() {
     // --- الرجوع لإخفاء html كما طلبت ---
-    const antiFlickerStyle = document.createElement('style');
-    antiFlickerStyle.id = 'anti-flicker';
     antiFlickerStyle.textContent = 'html { visibility: hidden !important; }';
     (document.head || document.documentElement).appendChild(antiFlickerStyle);
     // -------------------------------------
@@ -743,5 +741,3 @@
         new SupabaseAuthManager();
     }
 })();
-
-
