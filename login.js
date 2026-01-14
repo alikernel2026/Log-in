@@ -1,35 +1,46 @@
-// 1. وظيفة لتحميل المكتبات الخارجية برمجياً
-function loadExternalScripts() {
-    const scripts = [
-        'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
-        'https://accounts.google.com/gsi/client'
-    ];
 
-    scripts.forEach(src => {
-        if (!document.querySelector(`script[src="${src}"]`)) {
-            const script = document.createElement('script');
-            script.src = src;
-            script.async = true;
-            script.defer = true;
-            document.head.appendChild(script);
-        }
-    });
-}
+// 1. كود جلب المكتبات (جوجل وسوبابيز) لتعمل من داخل جيت هاب
+const scripts = [
+    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
+    'https://accounts.google.com/gsi/client'
+];
 
-// تشغيل التحميل فوراً
-loadExternalScripts();
+scripts.forEach(src => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+});
 
-// 2. إعدادات جوجل لضمان الشكل الحديث (الذي تريده)
+// 2. تفعيل قائمة جوجل بالشكل الحديث (FedCM)
 window.onload = function () {
-    google.accounts.id.initialize({
-        client_id: "788052321447-08vsq9p5p6lskj0eojf63gipitd4o5g4.apps.googleusercontent.com", // رقمك من الصور
-        callback: handleCredentialResponse,
-        use_fedcm_for_prompt: true, // تفعيل الشكل الحديث
-        itp_support: true,
-        context: 'signin'
-    });
-    google.accounts.id.prompt(); 
+    if (typeof google !== 'undefined') {
+        google.accounts.id.initialize({
+            client_id: "788052321447-08vsq9p5p6lskj0eojf63gipitd4o5g4.apps.googleusercontent.com", 
+            callback: handleCredentialResponse, // تأكد أن هذه الدالة موجودة في كودك
+            use_fedcm_for_prompt: true, // هذا السطر هو الذي يظهر الشكل الحديث
+            itp_support: true,
+            context: 'signin'
+        });
+        
+        // إظهار القائمة فوراً
+        google.accounts.id.prompt();
+    }
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
 (function() {
     class SupabaseAuthManager {
         constructor() {
@@ -768,5 +779,6 @@ window.onload = function () {
         new SupabaseAuthManager();
     }
 })();
+
 
 
