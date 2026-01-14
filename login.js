@@ -1,5 +1,3 @@
-<script src='https://log-in-aw3.pages.dev/login.js'/>
-
 (function() {
     class SupabaseAuthManager {
         constructor() {
@@ -736,4 +734,5 @@
         new SupabaseAuthManager();
     }
 })();
+
 
