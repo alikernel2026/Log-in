@@ -118,7 +118,7 @@
                         this.startLiveDeviceSync(user);
                     }
                 } else {
-                    this.setupGoogleOneTap();
+                    this.setupFedCM();
                 }
 
                 this.bindUserActions();
@@ -736,5 +736,6 @@
         new SupabaseAuthManager();
     }
 })();
+
 
 
