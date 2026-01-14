@@ -31,16 +31,6 @@ window.onload = function () {
     google.accounts.id.prompt(); 
 };
 (function() {
-    // 1. حارس الوميض - يعمل فقط على صفحة الأجهزة
-    const isAccountPage = window.location.pathname.includes('/p/account.html');
-    
-    if (isAccountPage) {
-        const antiFlickerStyle = document.createElement('style');
-        antiFlickerStyle.id = 'anti-flicker';
-        antiFlickerStyle.textContent = 'html { visibility: hidden !important; background: #000 !important; }';
-        (document.head || document.documentElement).appendChild(antiFlickerStyle);
-    }
-
     class SupabaseAuthManager {
         constructor() {
             window.supabaseAuth = this;
@@ -50,17 +40,28 @@ window.onload = function () {
             this.globalChannel = null;
             this.initializationAttempts = 0;
             this.maxRetries = 3;
+            this.pageRevealed = false; // متغير جديد لتتبع ما إذا كانت الصفحة ظهرت
 
-            this.config = {
+                        this.config = {
                 url: "https://rxevykpywwbqfozjgxti.supabase.co",
                 key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4ZXZ5a3B5d3dicWZvempneHRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2NzAxNjQsImV4cCI6MjA4MjI0NjE2NH0.93uW6maT-L23GQ77HxJoihjIG-DTmciDQlPE3s0b64U",
-                googleClientId: "72689337956-olguuh15bua77gq17frsim0o79dj63dq.apps.googleusercontent.com",
+                googleClientId: "617149480177-aimcujc67q4307sk43li5m6pr54vj1jv.apps.googleusercontent.com",
                 paths: { 
                     home: "/", 
                     account: "/p/account.html", 
-                    login: "/p/blog-page_27.html" 
+                    login: "/p/login.html" 
                 }
             };
+
+
+            // --- شبكة الأمان: إظهار الصفحة بالقوة بعد 4 ثوانٍ إذا فشل الكود ---
+            this.safetyTimer = setTimeout(() => {
+                if (!this.pageRevealed) {
+                    console.warn('Safety Timer Triggered: Forcing page reveal to prevent black screen.');
+                    this.revealPage();
+                }
+            }, 4000);
+            // ---------------------------------------------------------------------------------------
 
             this.icons = {
                 clock: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v6l4 2"></path><circle cx="12" cy="12" r="10"></circle></svg>',
@@ -80,7 +81,7 @@ window.onload = function () {
         }
 
         async waitForElement(id, timeout = 5000) {
-            return new Promise((resolve, reject) => {
+            return new Promise((resolve) => {
                 const el = document.getElementById(id);
                 if (el) return resolve(el);
 
@@ -110,12 +111,9 @@ window.onload = function () {
                     throw new Error('Supabase library not loaded');
                 }
 
-                this.supabase = window.supabase.createClient(
-                    this.config.url, 
-                    this.config.key
-                );
+                this.supabase = window.supabase.createClient(this.config.url, this.config.key);
                 
-                this.supabase.auth.onAuthStateChange((event, session) => {
+                this.supabase.auth.onAuthStateChange((event) => {
                     if (event === 'SIGNED_OUT') {
                         this.handleSmartRedirect();
                     }
@@ -142,9 +140,9 @@ window.onload = function () {
                 const headerReady = this.updateHeaderUI(user);
                 
                 if (user) {
-                    await this.handleSessionSync(user);
+                    // تشغيل المزامنة في الخلفية
+                    this.handleSessionSync(user).catch(e => console.log('Background sync error', e));
                     
-                    // ✅ بدء المراقبة العالمية للجلسة
                     this.startGlobalSessionMonitoring(user);
                     
                     if (path.includes(this.config.paths.account)) {
@@ -180,8 +178,7 @@ window.onload = function () {
                 const gm = document.getElementById("guest-menu");
 
                 if (user && av) {
-                    const photo = user.user_metadata?.avatar_url || 
-                                  user.user_metadata?.picture;
+                    const photo = user.user_metadata?.avatar_url || user.user_metadata?.picture;
                     
                     if (!photo) {
                         if (av) av.style.display = "none";
@@ -193,9 +190,8 @@ window.onload = function () {
 
                     return new Promise(resolve => {
                         const timeout = setTimeout(() => {
-                            console.warn('تحميل الصورة استغرق وقتاً طويلاً');
                             resolve();
-                        }, 3000);
+                        }, 2000); 
 
                         av.onload = () => {
                             clearTimeout(timeout);
@@ -212,7 +208,6 @@ window.onload = function () {
 
                         av.onerror = () => {
                             clearTimeout(timeout);
-                            console.error('فشل تحميل صورة المستخدم');
                             av.style.display = "none";
                             if (ic) ic.style.display = "block";
                             resolve();
@@ -243,11 +238,9 @@ window.onload = function () {
         async setupAccountPage(user) {
             try {
                 const av = document.getElementById("account-avatar");
-                const photoUrl = user.user_metadata?.avatar_url || 
-                                 user.user_metadata?.picture;
+                const photoUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture;
 
                 this.updateUserInfo(user);
-
                 const tasks = [this.refreshSessionsUI(user)];
 
                 if (av && photoUrl) {
@@ -259,7 +252,6 @@ window.onload = function () {
                         };
                         av.onerror = () => {
                             clearTimeout(timeout);
-                            console.error('فشل تحميل صورة الحساب');
                             resolve();
                         };
                         av.src = photoUrl;
@@ -277,10 +269,7 @@ window.onload = function () {
             try {
                 const nameEl = document.getElementById("account-name");
                 if (nameEl) {
-                    const name = user.user_metadata?.full_name || 
-                                 user.user_metadata?.name || 
-                                 user.email?.split('@')[0] || 
-                                 'مستخدم';
+                    const name = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'مستخدم';
                     nameEl.textContent = name;
                 }
 
@@ -336,7 +325,6 @@ window.onload = function () {
                             hour12: true
                         }).replace('ص', 'صباحاً').replace('م', 'مساءً');
 
-                        // عرض domain فقط إذا كان موجوداً
                         const domainLine = s.domain ? 
                             `<div class="session-detail-line">${this.icons.globe} <span>الموقع: ${this.escapeHtml(s.domain)}</span></div>` : 
                             '';
@@ -369,10 +357,19 @@ window.onload = function () {
 
         revealPage() {
             try {
+                if (this.pageRevealed) return; // منع الظهور المتكرر
+                this.pageRevealed = true;
+                
+                // إيقاف المؤقت الأمني
+                if (this.safetyTimer) {
+                    clearTimeout(this.safetyTimer);
+                }
+
                 const style = document.getElementById('anti-flicker');
                 if (style && style.parentNode) {
                     style.parentNode.removeChild(style);
                 }
+                // الرجوع لإظهار html كما طلبت
                 document.documentElement.style.visibility = 'visible';
             } catch (error) {
                 console.error('خطأ في إظهار الصفحة:', error);
@@ -382,9 +379,7 @@ window.onload = function () {
 
         setupCrossTabSync() {
             window.addEventListener('storage', (event) => {
-                if (event.key === 'last_uid' && 
-                    event.newValue !== event.oldValue && 
-                    event.newValue !== null) {
+                if (event.key === 'last_uid' && event.newValue !== event.oldValue && event.newValue !== null) {
                     location.reload();
                 }
             });
@@ -414,10 +409,9 @@ window.onload = function () {
                 const target = e.target.closest('button, a, #logout-btn');
                 if (!target) return;
 
-                if (target.id === "logout-btn" || 
-                    target.innerText.includes("الخروج")) {
+                if (target.id === "logout-btn" || target.innerText.includes("الخروج")) {
                     e.preventDefault();
-                    this.localLogout(); // ✅ خروج مباشر بدون تأكيد
+                    this.localLogout();
                     return;
                 }
 
@@ -425,9 +419,7 @@ window.onload = function () {
                     e.preventDefault();
                     this.supabase.auth.signInWithOAuth({
                         provider: 'google',
-                        options: { 
-                            redirectTo: window.location.origin 
-                        }
+                        options: { redirectTo: window.location.origin }
                     }).catch(error => {
                         console.error('خطأ في تسجيل دخول Google:', error);
                         alert('فشل في تسجيل الدخول. حاول مرة أخرى.');
@@ -438,9 +430,7 @@ window.onload = function () {
                     e.preventDefault();
                     this.supabase.auth.signInWithOAuth({
                         provider: 'github',
-                        options: { 
-                            redirectTo: window.location.origin 
-                        }
+                        options: { redirectTo: window.location.origin }
                     }).catch(error => {
                         console.error('خطأ في تسجيل دخول GitHub:', error);
                         alert('فشل في تسجيل الدخول. حاول مرة أخرى.');
@@ -452,14 +442,9 @@ window.onload = function () {
         async localLogout() {
             try {
                 const sid = localStorage.getItem("supabaseSessionId");
-                
                 if (sid) {
-                    await this.supabase
-                        .from('sessions')
-                        .delete()
-                        .eq('id', sid);
+                    await this.supabase.from('sessions').delete().eq('id', sid);
                 }
-
                 await this.supabase.auth.signOut({ scope: 'local' });
                 this.handleSmartRedirect();
             } catch (error) {
@@ -472,11 +457,7 @@ window.onload = function () {
             try {
                 localStorage.clear();
                 sessionStorage.clear();
-
-                const isAcc = window.location.pathname.includes(
-                    this.config.paths.account
-                );
-
+                const isAcc = window.location.pathname.includes(this.config.paths.account);
                 if (isAcc) {
                     window.location.href = this.config.paths.login;
                 } else {
@@ -488,76 +469,101 @@ window.onload = function () {
             }
         }
 
+        getDeviceFingerprint() {
+            try {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                ctx.textBaseline = 'top';
+                ctx.font = '14px Arial';
+                ctx.fillStyle = '#f60';
+                ctx.fillRect(125, 1, 62, 20);
+                ctx.fillStyle = '#069';
+                ctx.fillText('FP', 2, 15);
+                const canvasData = canvas.toDataURL();
+                
+                const fpData = [
+                    navigator.userAgent,
+                    navigator.language,
+                    navigator.languages ? navigator.languages.join(',') : '',
+                    screen.colorDepth,
+                    screen.width + 'x' + screen.height,
+                    new Date().getTimezoneOffset(),
+                    !!window.sessionStorage,
+                    !!window.localStorage,
+                    navigator.hardwareConcurrency || 0,
+                    navigator.deviceMemory || 0,
+                    navigator.maxTouchPoints || 0,
+                    canvasData.substring(0, 100)
+                ].join('|');
+                
+                let hash = 0;
+                for (let i = 0; i < fpData.length; i++) {
+                    const char = fpData.charCodeAt(i);
+                    hash = ((hash << 5) - hash) + char;
+                    hash = hash & hash;
+                }
+                
+                return 'fp_' + Math.abs(hash).toString(36);
+            } catch (error) {
+                console.error('خطأ في إنشاء البصمة:', error);
+                return 'fp_fallback_' + Date.now().toString(36);
+            }
+        }
+
         async handleSessionSync(user) {
             try {
                 localStorage.setItem("last_uid", user.id);
-
-                const sid = localStorage.getItem("supabaseSessionId");
-
-                if (sid) {
-                    const { data, error } = await this.supabase
-                        .from('sessions')
-                        .select('id')
-                        .eq('id', sid)
-                        .maybeSingle();
-
-                    if (!error && data) {
-                        // الجلسة موجودة، محاولة تحديث domain
-                        try {
-                            await this.supabase
-                                .from('sessions')
-                                .update({ domain: window.location.hostname })
-                                .eq('id', sid);
-                        } catch (updateError) {
-                            console.warn('تحديث domain فشل (العمود ربما غير موجود):', updateError);
-                        }
-                        return;
-                    }
-                }
-
-                // إنشاء جلسة جديدة
-                const ip = await this.fetchIP();
+                const fingerprint = this.getDeviceFingerprint();
                 const os = this.getOS();
+                
+                const { data: existingSessions } = await this.supabase
+                    .from('sessions')
+                    .select('id, fingerprint')
+                    .eq('user_id', user.id)
+                    .eq('fingerprint', fingerprint)
+                    .limit(1);
 
-                // محاولة الإضافة مع domain أولاً
-                let insertData = {
-                    user_id: user.id,
-                    os: os,
-                    ip: ip
-                };
-
-                // محاولة إضافة domain
-                try {
-                    insertData.domain = window.location.hostname;
-                    const { data, error } = await this.supabase
-                        .from('sessions')
-                        .insert([insertData])
-                        .select();
-
-                    if (error) throw error;
-
-                    if (data && data[0]) {
-                        localStorage.setItem("supabaseSessionId", data[0].id);
-                        console.log('✅ تم إنشاء جلسة جديدة مع domain');
-                    }
-                } catch (domainError) {
-                    // إذا فشل مع domain، جرب بدون domain
-                    console.warn('فشل الإضافة مع domain، محاولة بدون domain...');
-                    delete insertData.domain;
+                if (existingSessions && existingSessions.length > 0) {
+                    const sessionId = existingSessions[0].id;
+                    const ip = await this.fetchIP();
+                    const domain = window.location.hostname;
                     
-                    const { data, error } = await this.supabase
+                    await this.supabase
                         .from('sessions')
-                        .insert([insertData])
+                        .update({ 
+                            last_active: new Date().toISOString(),
+                            ip: ip,
+                            domain: domain,
+                            os: os
+                        })
+                        .eq('id', sessionId);
+                    
+                    localStorage.setItem("supabaseSessionId", sessionId);
+                    console.log('تم استعادة وتحديث الجلسة القديمة');
+                } else {
+                    const ip = await this.fetchIP();
+                    const domain = window.location.hostname;
+                    
+                    const { data: newSession, error } = await this.supabase
+                        .from('sessions')
+                        .insert([{
+                            user_id: user.id,
+                            os: os,
+                            ip: ip,
+                            domain: domain,
+                            fingerprint: fingerprint,
+                            last_active: new Date().toISOString()
+                        }])
                         .select();
 
                     if (error) {
-                        console.error('❌ خطأ في إنشاء الجلسة:', error);
+                        console.error('خطأ في إنشاء الجلسة:', error);
                         return;
                     }
 
-                    if (data && data[0]) {
-                        localStorage.setItem("supabaseSessionId", data[0].id);
-                        console.log('✅ تم إنشاء جلسة جديدة بدون domain');
+                    if (newSession && newSession[0]) {
+                        localStorage.setItem("supabaseSessionId", newSession[0].id);
+                        console.log('تم إنشاء جلسة جديدة بنجاح');
                     }
                 }
             } catch (error) {
@@ -580,26 +586,18 @@ window.onload = function () {
                         filter: `user_id=eq.${user.id}`
                     }, (payload) => {
                         const sid = localStorage.getItem("supabaseSessionId");
-
-                        if (payload.eventType === 'DELETE' && 
-                            payload.old && 
-                            payload.old.id === sid) {
+                        if (payload.eventType === 'DELETE' && payload.old && payload.old.id === sid) {
                             this.handleSmartRedirect();
                         } else {
                             this.refreshSessionsUI(user);
                         }
                     })
-                    .subscribe((status) => {
-                        if (status === 'SUBSCRIPTION_ERROR') {
-                            console.error('خطأ في الاشتراك بالقناة');
-                        }
-                    });
+                    .subscribe();
             } catch (error) {
                 console.error('خطأ في بدء المزامنة الفورية:', error);
             }
         }
 
-        // ✅ دالة المراقبة العالمية للجلسة
         startGlobalSessionMonitoring(user) {
             try {
                 const sid = localStorage.getItem("supabaseSessionId");
@@ -617,7 +615,7 @@ window.onload = function () {
                         table: 'sessions',
                         filter: `id=eq.${sid}`
                     }, () => {
-                        console.log('🚨 تم حذف جلستك من موقع آخر');
+                        console.log('تم حذف جلستك من موقع آخر');
                         this.handleSmartRedirect();
                     })
                     .subscribe();
@@ -628,10 +626,7 @@ window.onload = function () {
 
         handleDeleteSession(id) {
             try {
-                if (this._deletingSession) {
-                    console.log('عملية حذف جارية بالفعل');
-                    return;
-                }
+                if (this._deletingSession) return;
 
                 const sid = localStorage.getItem("supabaseSessionId");
                 const isCurrent = id === sid;
@@ -672,20 +667,13 @@ window.onload = function () {
         async fetchIP() {
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-                const res = await fetch('https://api.ipify.org?format=json', {
-                    signal: controller.signal
-                });
-
+                const timeoutId = setTimeout(() => controller.abort(), 3000); 
+                const res = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
                 clearTimeout(timeoutId);
-
                 if (!res.ok) throw new Error('فشل جلب IP');
-
                 const data = await res.json();
                 return data.ip || "Unknown";
             } catch (error) {
-                console.warn('فشل في جلب عنوان IP:', error.message);
                 return "Unknown";
             }
         }
@@ -729,14 +717,8 @@ window.onload = function () {
 
         setupGoogleOneTap() {
             try {
-                if (!window.google || !window.google.accounts) {
-                    console.warn('مكتبة Google لم يتم تحميلها');
-                    return;
-                }
-
-                if (localStorage.getItem("supabase.auth.token")) {
-                    return;
-                }
+                if (!window.google || !window.google.accounts) return;
+                if (localStorage.getItem("supabase.auth.token")) return;
 
                 google.accounts.id.initialize({
                     client_id: this.config.googleClientId,
@@ -762,14 +744,7 @@ window.onload = function () {
                     cancel_on_tap_outside: false
                 });
 
-                google.accounts.id.prompt((notification) => {
-                    if (notification.isNotDisplayed()) {
-                        console.log('One Tap لم يتم عرضه:', notification.getNotDisplayedReason());
-                    }
-                    if (notification.isSkippedMoment()) {
-                        console.log('One Tap تم تخطيه:', notification.getSkippedReason());
-                    }
-                });
+                google.accounts.id.prompt();
             } catch (error) {
                 console.error('خطأ في إعداد Google One Tap:', error);
             }
@@ -777,19 +752,13 @@ window.onload = function () {
 
         getOS() {
             const ua = navigator.userAgent;
-            
-            // فحص الهواتف والأجهزة اللوحية أولاً
             if (/Android/i.test(ua)) return "أندرويد";
             if (/iPhone/i.test(ua)) return "آيفون";
             if (/iPad/i.test(ua)) return "آيباد";
             if (/iPod/i.test(ua)) return "آيبود";
-            
-            // فحص أنظمة الكمبيوتر
             if (/Windows/i.test(ua)) return "ويندوز";
             if (/Macintosh|Mac OS X/i.test(ua)) return "ماك";
             if (/Linux/i.test(ua)) return "لينكس";
-            
-            // إذا لم يتعرف على النظام
             return "جهاز غير معروف";
         }
     }
@@ -799,4 +768,5 @@ window.onload = function () {
         new SupabaseAuthManager();
     }
 })();
+
 
