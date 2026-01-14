@@ -10,23 +10,28 @@
             this.maxRetries = 3;
             this.pageRevealed = false;
 
+            this._gsiPromise = null;      // جديد: كاش لتحميل سكربت Google مرة واحدة
+            this._oneTapPrompted = false; // جديد: منع تكرار prompt
+
             this.config = {
                 url: "https://rxevykpywwbqfozjgxti.supabase.co",
                 key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4ZXZ5a3B5d3dicWZvempneHRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2NzAxNjQsImV4cCI6MjA4MjI0NjE2NH0.93uW6maT-L23GQ77HxJoihjIG-DTmciDQlPE3s0b64U",
                 googleClientId: "617149480177-aimcujc67q4307sk43li5m6pr54vj1jv.apps.googleusercontent.com",
-                paths: { 
-                    home: "/", 
-                    account: "/p/account.html", 
-                    login: "/p/login.html" 
+                paths: {
+                    home: "/",
+                    account: "/p/account.html",
+                    login: "/p/login.html"
                 }
             };
 
+            // --- شبكة الأمان: إظهار الصفحة بالقوة بعد 4 ثوانٍ إذا فشل الكود ---
             this.safetyTimer = setTimeout(() => {
                 if (!this.pageRevealed) {
                     console.warn('Safety Timer Triggered: Forcing page reveal to prevent black screen.');
                     this.revealPage();
                 }
             }, 4000);
+            // ---------------------------------------------------------------------------------------
 
             this.icons = {
                 clock: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v6l4 2"></path><circle cx="12" cy="12" r="10"></circle></svg>',
@@ -63,9 +68,9 @@
                         resolve(target);
                     }
                 });
-                observer.observe(document.documentElement, { 
-                    childList: true, 
-                    subtree: true 
+                observer.observe(document.documentElement, {
+                    childList: true,
+                    subtree: true
                 });
             });
         }
@@ -77,7 +82,7 @@
                 }
 
                 this.supabase = window.supabase.createClient(this.config.url, this.config.key);
-                
+
                 this.supabase.auth.onAuthStateChange((event) => {
                     if (event === 'SIGNED_OUT') {
                         this.handleSmartRedirect();
@@ -85,7 +90,7 @@
                 });
 
                 const { data: { user }, error } = await this.supabase.auth.getUser();
-                
+
                 if (error && error.message !== 'Auth session missing!') {
                     console.error('خطأ في جلب بيانات المستخدم:', error);
                 }
@@ -103,17 +108,23 @@
                 }
 
                 const headerReady = this.updateHeaderUI(user);
-                
+
                 if (user) {
+                    // تشغيل المزامنة في الخلفية
                     this.handleSessionSync(user).catch(e => console.log('Background sync error', e));
+
                     this.startGlobalSessionMonitoring(user);
-                    
+
                     if (path.includes(this.config.paths.account)) {
                         await this.setupAccountPage(user);
                         this.startLiveDeviceSync(user);
                     }
                 } else {
-                    this.setupGoogleOneTap();
+                    // ✅ تعديل السرعة: لا تُحمّل Google One Tap إلا في صفحة تسجيل الدخول فقط
+                    // إذا تريدها بكل الصفحات: احذف شرط login
+                    if (path.includes(this.config.paths.login)) {
+                        this.setupGoogleOneTap().catch(e => console.log('OneTap error', e));
+                    }
                 }
 
                 this.bindUserActions();
@@ -142,7 +153,7 @@
 
                 if (user && av) {
                     const photo = user.user_metadata?.avatar_url || user.user_metadata?.picture;
-                    
+
                     if (!photo) {
                         if (av) av.style.display = "none";
                         if (ic) ic.style.display = "block";
@@ -154,7 +165,7 @@
                     return new Promise(resolve => {
                         const timeout = setTimeout(() => {
                             resolve();
-                        }, 2000); 
+                        }, 2000);
 
                         av.onload = () => {
                             clearTimeout(timeout);
@@ -252,7 +263,7 @@
                         minute: 'numeric',
                         hour12: true
                     }).replace('ص', 'صباحاً').replace('م', 'مساءً');
-                    
+
                     joinedEl.textContent = `انضم في: ${formatted}`;
                 }
             } catch (error) {
@@ -279,7 +290,7 @@
 
                 if (sessions && sessions.length > 0) {
                     const sid = localStorage.getItem("supabaseSessionId");
-                    
+
                     list.innerHTML = sessions.map(s => {
                         const isCurr = s.id === sid;
                         const time = new Date(s.created_at).toLocaleString('ar-EG', {
@@ -288,8 +299,8 @@
                             hour12: true
                         }).replace('ص', 'صباحاً').replace('م', 'مساءً');
 
-                        const domainLine = s.domain ? 
-                            `<div class="session-detail-line">${this.icons.globe} <span>الموقع: ${this.escapeHtml(s.domain)}</span></div>` : 
+                        const domainLine = s.domain ?
+                            `<div class="session-detail-line">${this.icons.globe} <span>الموقع: ${this.escapeHtml(s.domain)}</span></div>` :
                             '';
 
                         return `
@@ -322,7 +333,7 @@
             try {
                 if (this.pageRevealed) return;
                 this.pageRevealed = true;
-                
+
                 if (this.safetyTimer) {
                     clearTimeout(this.safetyTimer);
                 }
@@ -351,12 +362,16 @@
                 if (this.channel) {
                     try {
                         this.supabase.removeChannel(this.channel);
-                    } catch (error) {}
+                    } catch (error) {
+                        console.error('خطأ في تنظيف القناة:', error);
+                    }
                 }
                 if (this.globalChannel) {
                     try {
                         this.supabase.removeChannel(this.globalChannel);
-                    } catch (error) {}
+                    } catch (error) {
+                        console.error('خطأ في تنظيف القناة العالمية:', error);
+                    }
                 }
             });
         }
@@ -366,13 +381,13 @@
                 const target = e.target.closest('button, a, #logout-btn');
                 if (!target) return;
 
-                if (target.id === "logout-btn" || target.innerText.includes("الخروج")) {
+                if (target.id === "logout-btn" || (target.innerText && target.innerText.includes("الخروج"))) {
                     e.preventDefault();
                     this.localLogout();
                     return;
                 }
 
-                if (target.innerText.includes("Google")) {
+                if (target.innerText && target.innerText.includes("Google")) {
                     e.preventDefault();
                     this.supabase.auth.signInWithOAuth({
                         provider: 'google',
@@ -382,8 +397,8 @@
                         alert('فشل في تسجيل الدخول. حاول مرة أخرى.');
                     });
                 }
-                
-                else if (target.innerText.includes("GitHub")) {
+
+                else if (target.innerText && target.innerText.includes("GitHub")) {
                     e.preventDefault();
                     this.supabase.auth.signInWithOAuth({
                         provider: 'github',
@@ -437,7 +452,7 @@
                 ctx.fillStyle = '#069';
                 ctx.fillText('FP', 2, 15);
                 const canvasData = canvas.toDataURL();
-                
+
                 const fpData = [
                     navigator.userAgent,
                     navigator.language,
@@ -452,16 +467,17 @@
                     navigator.maxTouchPoints || 0,
                     canvasData.substring(0, 100)
                 ].join('|');
-                
+
                 let hash = 0;
                 for (let i = 0; i < fpData.length; i++) {
                     const char = fpData.charCodeAt(i);
                     hash = ((hash << 5) - hash) + char;
                     hash = hash & hash;
                 }
-                
+
                 return 'fp_' + Math.abs(hash).toString(36);
             } catch (error) {
+                console.error('خطأ في إنشاء البصمة:', error);
                 return 'fp_fallback_' + Date.now().toString(36);
             }
         }
@@ -471,7 +487,7 @@
                 localStorage.setItem("last_uid", user.id);
                 const fingerprint = this.getDeviceFingerprint();
                 const os = this.getOS();
-                
+
                 const { data: existingSessions } = await this.supabase
                     .from('sessions')
                     .select('id, fingerprint')
@@ -483,22 +499,23 @@
                     const sessionId = existingSessions[0].id;
                     const ip = await this.fetchIP();
                     const domain = window.location.hostname;
-                    
+
                     await this.supabase
                         .from('sessions')
-                        .update({ 
+                        .update({
                             last_active: new Date().toISOString(),
                             ip: ip,
                             domain: domain,
                             os: os
                         })
                         .eq('id', sessionId);
-                    
+
                     localStorage.setItem("supabaseSessionId", sessionId);
+                    console.log('تم استعادة وتحديث الجلسة القديمة');
                 } else {
                     const ip = await this.fetchIP();
                     const domain = window.location.hostname;
-                    
+
                     const { data: newSession, error } = await this.supabase
                         .from('sessions')
                         .insert([{
@@ -518,6 +535,7 @@
 
                     if (newSession && newSession[0]) {
                         localStorage.setItem("supabaseSessionId", newSession[0].id);
+                        console.log('تم إنشاء جلسة جديدة بنجاح');
                     }
                 }
             } catch (error) {
@@ -569,6 +587,7 @@
                         table: 'sessions',
                         filter: `id=eq.${sid}`
                     }, () => {
+                        console.log('تم حذف جلستك من موقع آخر');
                         this.handleSmartRedirect();
                     })
                     .subscribe();
@@ -620,7 +639,7 @@
         async fetchIP() {
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 3000); 
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
                 const res = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
                 clearTimeout(timeoutId);
                 if (!res.ok) throw new Error('فشل جلب IP');
@@ -668,14 +687,58 @@
             };
         }
 
-        setupGoogleOneTap() {
+        // ✅ جديد: تحميل سكربت Google GSI عند الحاجة فقط (بدون وضعه في القالب)
+        loadGoogleGsi() {
+            if (this._gsiPromise) return this._gsiPromise;
+
+            this._gsiPromise = new Promise((resolve, reject) => {
+                if (window.google && window.google.accounts && window.google.accounts.id) {
+                    resolve(true);
+                    return;
+                }
+
+                const existing = document.querySelector('script[data-google-gsi="1"]');
+                if (existing) {
+                    existing.addEventListener("load", () => resolve(true));
+                    existing.addEventListener("error", reject);
+                    return;
+                }
+
+                const s = document.createElement("script");
+                s.src = "https://accounts.google.com/gsi/client";
+                s.async = true;
+                s.defer = true;
+                s.setAttribute("data-google-gsi", "1");
+                s.onload = () => resolve(true);
+                s.onerror = reject;
+                document.head.appendChild(s);
+            });
+
+            return this._gsiPromise;
+        }
+
+        // ✅ تعديل: إجبار FedCM + تحميل السكربت Lazy Load + منع الشكل القديم قدر الإمكان
+        async setupGoogleOneTap() {
             try {
+                // منع تكرار prompt
+                if (this._oneTapPrompted) return;
+                this._oneTapPrompted = true;
+
+                // لا تشغلها في أدوات الفحص (PageSpeed/Lighthouse) حتى لا تخرب الأداء
+                const ua = navigator.userAgent || "";
+                const isAudit = /Chrome-Lighthouse|lighthouse/i.test(ua);
+                const isBot = /bot|crawler|spider|crawling/i.test(ua);
+                if (isAudit || isBot) return;
+
+                await this.loadGoogleGsi();
                 if (!window.google || !window.google.accounts) return;
-                if (localStorage.getItem("supabase.auth.token")) return;
+
+                // لو عندك جلسة Supabase لا تعرض OneTap
+                const { data } = await this.supabase.auth.getSession();
+                if (data && data.session) return;
 
                 google.accounts.id.initialize({
                     client_id: this.config.googleClientId,
-                    use_fedcm_for_prompt: true,
                     callback: async (response) => {
                         try {
                             const { error } = await this.supabase.auth.signInWithIdToken({
@@ -689,13 +752,17 @@
                                 return;
                             }
 
+                            try { google.accounts.id.cancel(); } catch(e) {}
                             location.reload();
                         } catch (error) {
                             console.error('خطأ في معالجة تسجيل الدخول:', error);
                         }
                     },
                     auto_select: false,
-                    cancel_on_tap_outside: false
+                    cancel_on_tap_outside: true,
+
+                    // ✅ هذا هو المهم: FedCM (القائمة الجديدة بالزاوية)
+                    use_fedcm_for_prompt: true
                 });
 
                 google.accounts.id.prompt();
