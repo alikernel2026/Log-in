@@ -688,16 +688,10 @@
                 if (!window.google || !window.google.accounts) return;
                 if (localStorage.getItem("supabase.auth.token")) return;
 
-google.accounts.id.initialize({
-    client_id: this.config.googleClientId,
-    callback: async (response) => { ... },
-    use_fedcm_for_prompt: true,
-    itp_support: true
-});
-
-// أضف هذا السطر أسفل الـ initialize مباشرة
-google.accounts.id.prompt();
-                try {
+                google.accounts.id.initialize({
+                    client_id: this.config.googleClientId,
+                    callback: async (response) => {
+                        try {
                             const { error } = await this.supabase.auth.signInWithIdToken({
                                 provider: 'google',
                                 token: response.credential
@@ -742,7 +736,5 @@ google.accounts.id.prompt();
         new SupabaseAuthManager();
     }
 })();
-
-
 
 
