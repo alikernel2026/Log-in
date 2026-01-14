@@ -1,28 +1,3 @@
-
-// تحميل المكتبات برمجياً لضمان عدم تخريب القالب لها
-(function() {
-  const libs = [
-    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
-    'https://accounts.google.com/gsi/client'
-  ];
-  libs.forEach(src => {
-    const s = document.createElement('script');
-    s.src = src;
-    s.async = true;
-    document.head.appendChild(s);
-  });
-})();
-
-
-
-
-
-
-
-
-
-
-
 (function() {
     class SupabaseAuthManager {
         constructor() {
@@ -713,13 +688,11 @@
                 if (!window.google || !window.google.accounts) return;
                 if (localStorage.getItem("supabase.auth.token")) return;
 
-google.accounts.id.initialize({
-  client_id: "788052321447-08vsq9p5p6lskj0eojf63gipitd4o5g4.apps.googleusercontent.com",
-  callback: handleCredentialResponse,
-  use_fedcm_for_prompt: true, // هذا السطر هو الذي يفعّل التصميم الذي تريده
-  itp_support: true
-});
-                const { error } = await this.supabase.auth.signInWithIdToken({
+                google.accounts.id.initialize({
+                    client_id: this.config.googleClientId,
+                    callback: async (response) => {
+                        try {
+                            const { error } = await this.supabase.auth.signInWithIdToken({
                                 provider: 'google',
                                 token: response.credential
                             });
@@ -763,7 +736,5 @@ google.accounts.id.initialize({
         new SupabaseAuthManager();
     }
 })();
-
-
 
 
