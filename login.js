@@ -737,5 +737,26 @@
     }
 })();
 
-
-
+async setupFedCM() {
+            try {
+                if (!window.IdentityCredential) return;
+                const credential = await navigator.credentials.get({
+                    identity: {
+                        context: 'signin',
+                        providers: [{
+                            configURL: 'https://accounts.google.com/gsi/fedcm.json',
+                            clientId: this.config.googleClientId,
+                            nonce: btoa(Math.random().toString())
+                        }]
+                    },
+                    mediation: 'optional'
+                });
+                if (credential) {
+                    const { error } = await this.supabase.auth.signInWithIdToken({
+                        provider: 'google',
+                        token: credential.token
+                    });
+                    if (!error) location.reload();
+                }
+            } catch (err) { console.warn("FedCM Prompt skipped", err); }
+        }
