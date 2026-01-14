@@ -1,8 +1,6 @@
 <script src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'/>
 <script async='async' defer='defer' src='https://accounts.google.com/gsi/client'/>
 
-<script>
-// <![CDATA[
 (function() {
     // 1. حارس الوميض - يعمل فقط على صفحة الأجهزة
     const isAccountPage = window.location.pathname.includes('/p/account.html');
@@ -772,5 +770,3 @@
         new SupabaseAuthManager();
     }
 })();
-//]]>
-</script>  
