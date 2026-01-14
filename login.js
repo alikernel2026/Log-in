@@ -1,6 +1,35 @@
-<script src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'/>
-<script async='async' defer='defer' src='https://accounts.google.com/gsi/client'/>
+// 1. وظيفة لتحميل المكتبات الخارجية برمجياً
+function loadExternalScripts() {
+    const scripts = [
+        'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
+        'https://accounts.google.com/gsi/client'
+    ];
 
+    scripts.forEach(src => {
+        if (!document.querySelector(`script[src="${src}"]`)) {
+            const script = document.createElement('script');
+            script.src = src;
+            script.async = true;
+            script.defer = true;
+            document.head.appendChild(script);
+        }
+    });
+}
+
+// تشغيل التحميل فوراً
+loadExternalScripts();
+
+// 2. إعدادات جوجل لضمان الشكل الحديث (الذي تريده)
+window.onload = function () {
+    google.accounts.id.initialize({
+        client_id: "788052321447-08vsq9p5p6lskj0eojf63gipitd4o5g4.apps.googleusercontent.com", // رقمك من الصور
+        callback: handleCredentialResponse,
+        use_fedcm_for_prompt: true, // تفعيل الشكل الحديث
+        itp_support: true,
+        context: 'signin'
+    });
+    google.accounts.id.prompt(); 
+};
 (function() {
     // 1. حارس الوميض - يعمل فقط على صفحة الأجهزة
     const isAccountPage = window.location.pathname.includes('/p/account.html');
@@ -770,3 +799,4 @@
         new SupabaseAuthManager();
     }
 })();
+
