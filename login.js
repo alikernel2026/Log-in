@@ -8,28 +8,9 @@
             this.globalChannel = null;
             this.initializationAttempts = 0;
             this.maxRetries = 3;
-            this.pageRevealed = false; 
+            this.pageRevealed = false; // متغير جديد لتتبع ما إذا كانت الصفحة ظهرت
 
-            // --- الحل الحقيقي: إخفاء العناصر المتأرجحة مؤقتاً لتجنب الترميش ---
-            const antiFlickerStyle = document.createElement('style');
-            antiFlickerStyle.id = 'anti-flicker-style';
-            // نخفي فقط القوائم والأيقونات لضمان عدم حدوث قفصات
-            antiFlickerStyle.innerHTML = `
-                #user-avatar-icon, 
-                #profile-icon, 
-                #user-menu, 
-                #guest-menu,
-                #sessions-list {
-                    opacity: 0 !important; 
-                    transition: opacity 0.2s ease-in;
-                }
-            `;
-            if (document.head) {
-                document.head.appendChild(antiFlickerStyle);
-            }
-            // ---------------------------------------------------------------------
-
-            this.config = {
+                        this.config = {
                 url: "https://rxevykpywwbqfozjgxti.supabase.co",
                 key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4ZXZ5a3B5d3dicWZvempneHRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2NzAxNjQsImV4cCI6MjA4MjI0NjE2NH0.93uW6maT-L23GQ77HxJoihjIG-DTmciDQlPE3s0b64U",
                 googleClientId: "617149480177-aimcujc67q4307sk43li5m6pr54vj1jv.apps.googleusercontent.com",
@@ -39,6 +20,16 @@
                     login: "/p/login.html" 
                 }
             };
+
+
+            // --- شبكة الأمان: إظهار الصفحة بالقوة بعد 4 ثوانٍ إذا فشل الكود ---
+            this.safetyTimer = setTimeout(() => {
+                if (!this.pageRevealed) {
+                    console.warn('Safety Timer Triggered: Forcing page reveal to prevent black screen.');
+                    this.revealPage();
+                }
+            }, 4000);
+            // ---------------------------------------------------------------------------------------
 
             this.icons = {
                 clock: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v6l4 2"></path><circle cx="12" cy="12" r="10"></circle></svg>',
@@ -50,7 +41,7 @@
 
             this.init().catch(error => {
                 console.error('فشل في تهيئة المصادقة:', error);
-                this.removeAntiFlicker(); // نكشف الصفحة حتى لو فشلت
+                this.revealPage();
             });
 
             this.setupCrossTabSync();
@@ -80,18 +71,6 @@
                     subtree: true 
                 });
             });
-        }
-
-        removeAntiFlicker() {
-            try {
-                const style = document.getElementById('anti-flicker-style');
-                if (style && style.parentNode) {
-                    style.parentNode.removeChild(style);
-                }
-                // نجعل العناصر ظاهرة بعد الحذف
-                const elements = document.querySelectorAll('#user-avatar-icon, #profile-icon, #user-menu, #guest-menu, #sessions-list');
-                elements.forEach(el => el.style.opacity = '1');
-            } catch (e) {}
         }
 
         async init() {
@@ -126,11 +105,12 @@
                     return;
                 }
 
-                // نقوم بتحديث الواجهة أولاً (الآن العناصر مخفية، لذا لن نرى ترميش)
-                await this.updateHeaderUI(user);
+                const headerReady = this.updateHeaderUI(user);
                 
                 if (user) {
+                    // تشغيل المزامنة في الخلفية
                     this.handleSessionSync(user).catch(e => console.log('Background sync error', e));
+                    
                     this.startGlobalSessionMonitoring(user);
                     
                     if (path.includes(this.config.paths.account)) {
@@ -142,10 +122,8 @@
                 }
 
                 this.bindUserActions();
-                
-                // --- الخطوة الأخيرة: إظهار العناصر الآن بعد أن أصبحت جاهزة ---
-                this.removeAntiFlicker();
-                
+                await headerReady;
+                this.revealPage();
                 this.isInitialized = true;
 
             } catch (error) {
@@ -155,7 +133,7 @@
                 if (this.initializationAttempts < this.maxRetries) {
                     setTimeout(() => this.init(), 1000);
                 } else {
-                    this.removeAntiFlicker();
+                    this.revealPage();
                 }
             }
         }
@@ -187,7 +165,6 @@
                             clearTimeout(timeout);
                             av.classList.remove("hidden");
                             av.style.display = "block";
-                            av.style.opacity = '1'; // تأكيد الظهور
                             if (ic) {
                                 ic.style.display = "none";
                                 ic.classList.add("hidden");
@@ -347,8 +324,25 @@
         }
 
         revealPage() {
-            // هذه الدالة الآن تقوم باستدعاء removeAntiFlicker فقط
-            this.removeAntiFlicker();
+            try {
+                if (this.pageRevealed) return; // منع الظهور المتكرر
+                this.pageRevealed = true;
+                
+                // إيقاف المؤقت الأمني
+                if (this.safetyTimer) {
+                    clearTimeout(this.safetyTimer);
+                }
+
+                const style = document.getElementById('anti-flicker');
+                if (style && style.parentNode) {
+                    style.parentNode.removeChild(style);
+                }
+                // الرجوع لإظهار html كما طلبت
+                document.documentElement.style.visibility = 'visible';
+            } catch (error) {
+                console.error('خطأ في إظهار الصفحة:', error);
+                document.documentElement.style.visibility = 'visible';
+            }
         }
 
         setupCrossTabSync() {
@@ -743,3 +737,6 @@
         new SupabaseAuthManager();
     }
 })();
+
+
+
