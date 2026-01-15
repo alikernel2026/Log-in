@@ -689,8 +689,9 @@
                 if (localStorage.getItem("supabase.auth.token")) return;
 
                 google.accounts.id.initialize({
-                    client_id: this.config.googleClientId,
-                    callback: async (response) => {
+    client_id: this.config.googleClientId,
+    use_fedcm_for_prompt: true,
+    callback: async (response) => {
                         try {
                             const { error } = await this.supabase.auth.signInWithIdToken({
                                 provider: 'google',
@@ -736,5 +737,6 @@
         new SupabaseAuthManager();
     }
 })();
+
 
 
