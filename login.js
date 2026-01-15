@@ -8,9 +8,9 @@
             this.globalChannel = null;
             this.initializationAttempts = 0;
             this.maxRetries = 3;
-            this.pageRevealed = false; // متغير جديد لتتبع ما إذا كانت الصفحة ظهرت
+            this.pageRevealed = false; 
 
-                        this.config = {
+            this.config = {
                 url: "https://rxevykpywwbqfozjgxti.supabase.co",
                 key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4ZXZ5a3B5d3dicWZvempneHRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2NzAxNjQsImV4cCI6MjA4MjI0NjE2NH0.93uW6maT-L23GQ77HxJoihjIG-DTmciDQlPE3s0b64U",
                 googleClientId: "617149480177-aimcujc67q4307sk43li5m6pr54vj1jv.apps.googleusercontent.com",
@@ -21,15 +21,13 @@
                 }
             };
 
-
-            // --- شبكة الأمان: إظهار الصفحة بالقوة بعد 4 ثوانٍ إذا فشل الكود ---
+            // شبكة الأمان: إظهار الصفحة بالقوة بعد 4 ثوانٍ إذا فشل الكود
             this.safetyTimer = setTimeout(() => {
                 if (!this.pageRevealed) {
                     console.warn('Safety Timer Triggered: Forcing page reveal to prevent black screen.');
                     this.revealPage();
                 }
             }, 4000);
-            // ---------------------------------------------------------------------------------------
 
             this.icons = {
                 clock: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v6l4 2"></path><circle cx="12" cy="12" r="10"></circle></svg>',
@@ -105,12 +103,14 @@
                     return;
                 }
 
+                // --- التعديل الجديد: تحديد حالة الهيدر فوراً لمنع الوميض ---
+                this.preloadHeaderState(user); 
+                // --------------------------------------------------------
+
                 const headerReady = this.updateHeaderUI(user);
                 
                 if (user) {
-                    // تشغيل المزامنة في الخلفية
                     this.handleSessionSync(user).catch(e => console.log('Background sync error', e));
-                    
                     this.startGlobalSessionMonitoring(user);
                     
                     if (path.includes(this.config.paths.account)) {
@@ -138,65 +138,82 @@
             }
         }
 
+        // --- دالة جديدة مساعدة لإخفاء العناصر قبل بدء التحميل ---
+        preloadHeaderState(user) {
+            try {
+                const av = document.getElementById("user-avatar-icon");
+                const ic = document.getElementById("profile-icon");
+                const um = document.getElementById("user-menu");
+                const gm = document.getElementById("guest-menu");
+
+                if (user) {
+                    // المستخدم مسجل دخول: نخفي قائمة الضيف فوراً
+                    if (gm) gm.style.display = "none";
+                    if (um) um.style.display = "block";
+                } else {
+                    // زائر: نخفي قائمة المستخدم والصورة فوراً
+                    if (av) av.style.display = "none";
+                    if (um) um.style.display = "none";
+                    if (gm) gm.style.display = "block";
+                    if (ic) ic.style.display = "block";
+                }
+            } catch (e) {
+                // تجاهل الأخطاء لأننا نريد فقط تحسين التجربة البصرية
+            }
+        }
+
         async updateHeaderUI(user) {
             try {
                 const av = await this.waitForElement("user-avatar-icon");
                 const ic = document.getElementById("profile-icon");
                 const um = document.getElementById("user-menu");
                 const gm = document.getElementById("guest-menu");
+                
+                // إذا لم يكن المستخدم مسجلاً، قمنا بالتعامل معه في preloadHeaderState
+                if (!user) return Promise.resolve();
 
-                if (user && av) {
-                    const photo = user.user_metadata?.avatar_url || user.user_metadata?.picture;
-                    
-                    if (!photo) {
-                        if (av) av.style.display = "none";
-                        if (ic) ic.style.display = "block";
-                        if (um) um.style.display = "block";
-                        if (gm) gm.style.display = "none";
-                        return Promise.resolve();
-                    }
+                if (!av) return Promise.resolve();
 
-                    return new Promise(resolve => {
-                        const timeout = setTimeout(() => {
-                            resolve();
-                        }, 2000); 
-
-                        av.onload = () => {
-                            clearTimeout(timeout);
-                            av.classList.remove("hidden");
-                            av.style.display = "block";
-                            if (ic) {
-                                ic.style.display = "none";
-                                ic.classList.add("hidden");
-                            }
-                            if (um) um.style.display = "block";
-                            if (gm) gm.style.display = "none";
-                            resolve();
-                        };
-
-                        av.onerror = () => {
-                            clearTimeout(timeout);
-                            av.style.display = "none";
-                            if (ic) ic.style.display = "block";
-                            resolve();
-                        };
-
-                        av.setAttribute('referrerpolicy', 'no-referrer');
-                        av.src = photo;
-                    });
-                } else {
-                    if (av) {
-                        av.style.display = "none";
-                        av.classList.add("hidden");
-                    }
-                    if (ic) {
-                        ic.style.display = "block";
-                        ic.classList.remove("hidden");
-                    }
-                    if (um) um.style.display = "none";
-                    if (gm) gm.style.display = "block";
+                const photo = user.user_metadata?.avatar_url || user.user_metadata?.picture;
+                
+                if (!photo) {
+                    // لا توجد صورة -> نظهر الأيقونة الافتراضية
+                    if (av) av.style.display = "none";
+                    if (ic) ic.style.display = "block";
+                    if (um) um.style.display = "block";
+                    if (gm) gm.style.display = "none";
                     return Promise.resolve();
                 }
+
+                // توجد صورة -> نخفي الأيقونة الافتراضية فوراً قبل التحميل
+                if (ic) ic.style.display = "none";
+                if (gm) gm.style.display = "none";
+
+                return new Promise(resolve => {
+                    const timeout = setTimeout(() => {
+                        resolve();
+                    }, 2000); 
+
+                    av.onload = () => {
+                        clearTimeout(timeout);
+                        av.classList.remove("hidden");
+                        av.style.display = "block";
+                        // تأكد من إظهار القائمة
+                        if (um) um.style.display = "block";
+                        resolve();
+                    };
+
+                    av.onerror = () => {
+                        clearTimeout(timeout);
+                        av.style.display = "none";
+                        // في حال فشلت الصورة نعود للأيقونة
+                        if (ic) ic.style.display = "block";
+                        resolve();
+                    };
+
+                    av.setAttribute('referrerpolicy', 'no-referrer');
+                    av.src = photo;
+                });
             } catch (error) {
                 console.error('خطأ في تحديث واجهة الهيدر:', error);
                 return Promise.resolve();
@@ -325,10 +342,9 @@
 
         revealPage() {
             try {
-                if (this.pageRevealed) return; // منع الظهور المتكرر
+                if (this.pageRevealed) return; 
                 this.pageRevealed = true;
                 
-                // إيقاف المؤقت الأمني
                 if (this.safetyTimer) {
                     clearTimeout(this.safetyTimer);
                 }
@@ -337,7 +353,6 @@
                 if (style && style.parentNode) {
                     style.parentNode.removeChild(style);
                 }
-                // الرجوع لإظهار html كما طلبت
                 document.documentElement.style.visibility = 'visible';
             } catch (error) {
                 console.error('خطأ في إظهار الصفحة:', error);
@@ -689,9 +704,9 @@
                 if (localStorage.getItem("supabase.auth.token")) return;
 
                 google.accounts.id.initialize({
-    client_id: this.config.googleClientId,
-    use_fedcm_for_prompt: true,
-    callback: async (response) => {
+                    client_id: this.config.googleClientId,
+                    use_fedcm_for_prompt: true,
+                    callback: async (response) => {
                         try {
                             const { error } = await this.supabase.auth.signInWithIdToken({
                                 provider: 'google',
@@ -737,6 +752,3 @@
         new SupabaseAuthManager();
     }
 })();
-
-
-
