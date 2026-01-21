@@ -1,6 +1,71 @@
+(function() {
+    try {
+        const photoURL = localStorage.getItem("userPhotoURL");
+        const userAvatarIcon = document.getElementById("user-avatar-icon");
+        const profileIcon = document.getElementById("profile-icon");
+        const userMenu = document.getElementById("user-menu");
+        const guestMenu = document.getElementById("guest-menu");
+        const accountAvatar = document.getElementById("account-avatar");
+
+        // --- تعديل الهيدر ---
+        if (photoURL && photoURL !== "null") {
+            if (userAvatarIcon) {
+                if (userAvatarIcon.getAttribute('src')) {
+                } else {
+                    userAvatarIcon.src = photoURL;
+                }
+                userAvatarIcon.classList.remove("hidden");
+                userAvatarIcon.style.display = "block";
+            }
+            if (profileIcon) {
+                profileIcon.classList.add("hidden");
+                profileIcon.style.display = "none";
+            }
+            if (userMenu) {
+                userMenu.classList.remove("hidden");
+                userMenu.style.display = "block";
+            }
+            if (guestMenu) {
+                guestMenu.classList.add("hidden");
+                guestMenu.style.display = "none";
+            }
+            // === إصلاح صورة صفحة الحساب ===
+            if (accountAvatar) {
+                if (!accountAvatar.getAttribute('src') || accountAvatar.getAttribute('src') === "") {
+                    accountAvatar.src = photoURL;
+                }
+            }
+        }
+
+        // --- تعديل نصوص الحساب (بشكل آمن جداً) ---
+        const accountName = document.getElementById("account-name");
+        const accountEmail = document.getElementById("account-email");
+        const accountJoined = document.getElementById("account-joined-date");
+        
+        const cachedName = localStorage.getItem("userDisplayName");
+        const cachedEmail = localStorage.getItem("userEmail");
+        const cachedJoined = localStorage.getItem("userJoinedDate");
+
+        if (cachedName && accountName && (!accountName.textContent || accountName.textContent === "جاري التحميل...")) accountName.textContent = cachedName;
+        if (cachedEmail && accountEmail && !accountEmail.textContent) accountEmail.textContent = cachedEmail;
+        if (cachedJoined && accountJoined && !accountJoined.textContent) accountJoined.textContent = cachedJoined;
+
+        // --- الجلسات ---
+        const sessionsList = document.getElementById("sessions-list");
+        if (sessionsList && sessionsList.children.length === 0) {
+            const cachedSessions = localStorage.getItem("userSessionsHTMLCache");
+            if (cachedSessions) {
+                sessionsList.innerHTML = cachedSessions;
+            }
+        }
+
+    } catch (e) {
+        console.log("Instant Restore Error:", e);
+    }
+})();
 // ========================================================
-// login.js - الكود الأصلي مع إصلاح التأخير
-// ========================================================
+
+
 (function() {
     class SupabaseAuthManager {
         constructor() {
@@ -11,7 +76,6 @@
             this.globalChannel = null;
             this.initializationAttempts = 0;
             this.maxRetries = 3;
-            this._deletingSession = false;
 
             this.config = {
                 url: "https://rxevykpywwbqfozjgxti.supabase.co",
@@ -40,6 +104,23 @@
             this.setupBeforeUnload();
         }
 
+        async waitForElement(id, timeout = 2000) {
+            return new Promise((resolve) => {
+                const el = document.getElementById(id);
+                if (el) return resolve(el);
+                const timeoutId = setTimeout(() => { observer.disconnect(); resolve(null); }, timeout);
+                const observer = new MutationObserver(() => {
+                    const target = document.getElementById(id);
+                    if (target) {
+                        clearTimeout(timeoutId);
+                        observer.disconnect();
+                        resolve(target);
+                    }
+                });
+                observer.observe(document.documentElement, { childList: true, subtree: true });
+            });
+        }
+
         async init() {
             try {
                 if (!window.supabase || !window.supabase.createClient) {
@@ -64,7 +145,6 @@
                 const path = window.location.pathname;
 
                 if (user && path.includes(this.config.paths.login)) {
-                    this.cacheUserData(user);
                     window.location.href = this.config.paths.home;
                     return;
                 }
@@ -74,14 +154,13 @@
                     return;
                 }
 
+                await this.updateHeaderUI(user);
+                
                 if (user) {
-                    this.cacheUserData(user);
-                    this.updateHeaderUI(user);
                     this.setupAccountPage(user).catch(e => {}); 
                     this.handleSessionSync(user).catch(e => {});
                     this.startGlobalSessionMonitoring(user);
                 } else {
-                    this.showGuestUI();
                     this.setupGoogleOneTap();
                 }
 
@@ -97,82 +176,114 @@
             }
         }
 
-        cacheUserData(user) {
-            const photo = user.user_metadata?.avatar_url || user.user_metadata?.picture;
-            const name = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'مستخدم';
-            
-            if (photo) localStorage.setItem("userPhotoURL", photo);
-            localStorage.setItem("userDisplayName", name);
-            localStorage.setItem("userEmail", user.email || '');
-            localStorage.setItem("last_uid", user.id);
-            
-            const date = new Date(user.created_at);
-            const formatted = date.toLocaleString('ar-u-nu-latn', {
-                year: 'numeric', month: 'numeric', day: 'numeric',
-                hour: 'numeric', minute: 'numeric', hour12: true
-            }).replace('ص', 'صباحاً').replace('م', 'مساءً');
-            localStorage.setItem("userJoinedDate", "انضم في: " + formatted);
-        }
-
         clearCache() {
             localStorage.removeItem("userPhotoURL");
             localStorage.removeItem("userDisplayName");
             localStorage.removeItem("userEmail");
             localStorage.removeItem("userJoinedDate");
             localStorage.removeItem("userSessionsHTMLCache");
-            localStorage.removeItem("last_uid");
-            localStorage.removeItem("supabaseSessionId");
         }
 
-        showGuestUI() {
-            var ic = document.getElementById("profile-icon");
-            var av = document.getElementById("user-avatar-icon");
-            var um = document.getElementById("user-menu");
-            var gm = document.getElementById("guest-menu");
-            
-            if (ic) { ic.style.display = "block"; ic.classList.remove("hidden"); }
-            if (av) { av.style.display = "none"; av.classList.add("hidden"); }
-            if (um) um.style.display = "none";
-            if (gm) gm.style.display = "block";
-        }
+        async updateHeaderUI(user) {
+            try {
+                const av = await this.waitForElement("user-avatar-icon");
+                const ic = document.getElementById("profile-icon");
+                const um = document.getElementById("user-menu");
+                const gm = document.getElementById("guest-menu");
 
-        updateHeaderUI(user) {
-            var av = document.getElementById("user-avatar-icon");
-            var ic = document.getElementById("profile-icon");
-            var um = document.getElementById("user-menu");
-            var gm = document.getElementById("guest-menu");
-            var photo = user.user_metadata?.avatar_url || user.user_metadata?.picture;
+                if (user && av) {
+                    const photo = user.user_metadata?.avatar_url || user.user_metadata?.picture;
+                    
+                    localStorage.setItem("userPhotoURL", photo);
 
-            if (photo && av) {
-                av.src = photo;
-                av.style.display = "block";
-                av.classList.remove("hidden");
-                if (ic) { ic.style.display = "none"; ic.classList.add("hidden"); }
-                if (um) um.style.display = "block";
-                if (gm) gm.style.display = "none";
-            } else {
-                if (av) { av.style.display = "none"; av.classList.add("hidden"); }
-                if (ic) { ic.style.display = "block"; ic.classList.remove("hidden"); }
-                if (um) um.style.display = "block";
-                if (gm) gm.style.display = "none";
+                    if (av.getAttribute('src')) {
+                        if (ic) { ic.style.display = "none"; ic.classList.add("hidden"); }
+                        if (um) um.style.display = "block";
+                        if (gm) gm.style.display = "none";
+                        av.classList.remove("hidden");
+                        av.style.display = "block";
+                        return Promise.resolve();
+                    }
+
+                    if (!photo) {
+                        if (av) av.style.display = "none";
+                        if (ic) { ic.style.display = "block"; ic.classList.remove("hidden"); }
+                        if (um) um.style.display = "block";
+                        if (gm) gm.style.display = "none";
+                        return Promise.resolve();
+                    }
+
+                    return new Promise(resolve => {
+                        const timeout = setTimeout(() => { resolve(); }, 2000); 
+
+                        av.onload = () => {
+                            clearTimeout(timeout);
+                            av.classList.remove("hidden");
+                            av.style.display = "block";
+                            if (ic) {
+                                ic.style.display = "none";
+                                ic.classList.add("hidden");
+                            }
+                            if (um) um.style.display = "block";
+                            if (gm) gm.style.display = "none";
+                            resolve();
+                        };
+
+                        av.onerror = () => {
+                            clearTimeout(timeout);
+                            av.style.display = "none";
+                            if (ic) { ic.style.display = "block"; ic.classList.remove("hidden"); }
+                            resolve();
+                        };
+
+                        av.setAttribute('referrerpolicy', 'no-referrer');
+                        av.src = photo;
+                    });
+                } else {
+                    if (av) { av.style.display = "none"; av.classList.add("hidden"); }
+                    if (ic) { ic.style.display = "block"; ic.classList.remove("hidden"); }
+                    if (um) um.style.display = "none";
+                    if (gm) gm.style.display = "block";
+                    return Promise.resolve();
+                }
+            } catch (error) {
+                console.error('خطأ الهيدر:', error);
+                return Promise.resolve();
             }
         }
 
         async setupAccountPage(user) {
             try {
-                var av = document.getElementById("account-avatar");
-                var photoUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture;
-
-                if (av && photoUrl) {
-                    av.src = photoUrl;
-                }
+                const av = document.getElementById("account-avatar");
+                const photoUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture;
 
                 this.updateUserInfo(user);
                 
-                var list = document.getElementById("sessions-list");
-                if (list) {
+                const list = document.getElementById("sessions-list");
+                if (!list) return;
+
+                if (list.children.length === 0) {
                     await this.refreshSessionsUI(user);
+                } else {
                     this.startLiveDeviceSync(user);
+                }
+
+                // === إصلاح صورة صفحة الحساب - تحميل في الخلفية ===
+                if (av && photoUrl) {
+                    const currentSrc = av.getAttribute('src');
+                    if (currentSrc && currentSrc !== "" && currentSrc !== window.location.href) {
+                        return;
+                    }
+                    
+                    // تحميل الصورة في الخلفية أولاً
+                    const tempImg = new Image();
+                    tempImg.onload = () => {
+                        av.src = photoUrl;
+                    };
+                    tempImg.onerror = () => {
+                        console.log("فشل تحميل صورة الحساب");
+                    };
+                    tempImg.src = photoUrl;
                 }
             } catch (error) {
                 console.error('خطأ إعداد الحساب:', error);
@@ -181,37 +292,50 @@
 
         updateUserInfo(user) {
             try {
-                var nameEl = document.getElementById("account-name");
+                const nameEl = document.getElementById("account-name");
                 if (nameEl) {
-                    var name = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'مستخدم';
-                    nameEl.textContent = name;
+                    const name = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'مستخدم';
+                    localStorage.setItem("userDisplayName", name);
+                    
+                    if (!nameEl.textContent || nameEl.textContent.trim() === '' || nameEl.textContent === 'جاري التحميل...') {
+                        nameEl.textContent = name;
+                    }
                 }
 
-                var emailEl = document.getElementById("account-email");
+                const emailEl = document.getElementById("account-email");
                 if (emailEl) {
-                    emailEl.textContent = user.email || '';
+                    localStorage.setItem("userEmail", user.email || '');
+                    if (!emailEl.textContent) emailEl.textContent = user.email || '';
                 }
 
-                var joinedEl = document.getElementById("account-joined-date");
+                const joinedEl = document.getElementById("account-joined-date");
                 if (joinedEl) {
-                    var date = new Date(user.created_at);
-                    var formatted = date.toLocaleString('ar-u-nu-latn', {
+                    const date = new Date(user.created_at);
+                    const formatted = date.toLocaleString('ar-u-nu-latn', {
                         year: 'numeric', month: 'numeric', day: 'numeric',
                         hour: 'numeric', minute: 'numeric', hour12: true
                     }).replace('ص', 'صباحاً').replace('م', 'مساءً');
-                    joinedEl.textContent = "انضم في: " + formatted;
+                    
+                    const fullText = `انضم في: ${formatted}`;
+                    localStorage.setItem("userJoinedDate", fullText);
+                    
+                    if (!joinedEl.textContent) {
+                        joinedEl.textContent = fullText;
+                    }
                 }
             } catch (error) {
                 console.error('خطأ المعلومات:', error);
             }
         }
 
-        async refreshSessionsUI(user, forceUpdate) {
+        async refreshSessionsUI(user, forceUpdate = false) {
             try {
-                var list = document.getElementById("sessions-list");
+                const list = document.getElementById("sessions-list");
                 if (!list) return;
 
-                var { data: sessions, error } = await this.supabase
+                if (!forceUpdate && list.children.length > 0) return;
+
+                const { data: sessions, error } = await this.supabase
                     .from('sessions')
                     .select('*')
                     .eq('user_id', user.id)
@@ -223,128 +347,124 @@
                 }
 
                 if (sessions && sessions.length > 0) {
-                    var sid = localStorage.getItem("supabaseSessionId");
-                    var self = this;
-                    var htmlContent = sessions.map(function(s) {
-                        var isCurr = s.id === sid;
-                        var time = new Date(s.created_at).toLocaleString('ar-u-nu-latn', {
+                    const sid = localStorage.getItem("supabaseSessionId");
+                    const htmlContent = sessions.map(s => {
+                        const isCurr = s.id === sid;
+                        const time = new Date(s.created_at).toLocaleString('ar-u-nu-latn', {
                             hour: 'numeric', minute: 'numeric', hour12: true
                         }).replace('ص', 'AM').replace('م', 'PM');
 
-                        var domainLine = s.domain ? 
-                            '<div class="session-detail-line">' + self.icons.globe + ' <span>الموقع: ' + self.escapeHtml(s.domain) + '</span></div>' : 
+                        const domainLine = s.domain ? 
+                            `<div class="session-detail-line">${this.icons.globe} <span>الموقع: ${this.escapeHtml(s.domain)}</span></div>` : 
                             '';
 
-                        return '<div class="session-item" id="session-' + s.id + '">' +
-                            '<div class="session-details">' +
-                                '<div class="session-detail-line">' + self.icons.clock + ' <span>الوقت: ' + time + '</span></div>' +
-                                '<div class="session-detail-line">' + self.icons.device + ' <span>نظام التشغيل: ' + self.escapeHtml(s.os) + '</span></div>' +
-                                '<div class="session-detail-line">' + self.icons.location + ' <span>العنوان: ' + self.escapeHtml(s.ip) + '</span></div>' +
-                                domainLine +
-                                (isCurr ? '<div class="session-detail-line current-session-indicator">' + self.icons.check + ' <span>جلستك الحالية</span></div>' : '') +
-                            '</div>' +
-                            '<button class="terminate-btn ' + (isCurr ? 'icon-current' : 'icon-terminate') + '" onclick="window.supabaseAuth.handleDeleteSession(\'' + s.id + '\')"></button>' +
-                        '</div>';
+                        return `
+                        <div class="session-item" id="session-${s.id}">
+                            <div class="session-details">
+                                <div class="session-detail-line">${this.icons.clock} <span>الوقت: ${time}</span></div>
+                                <div class="session-detail-line">${this.icons.device} <span>نظام التشغيل: ${this.escapeHtml(s.os)}</span></div>
+                                <div class="session-detail-line">${this.icons.location} <span>العنوان: ${this.escapeHtml(s.ip)}</span></div>
+                                ${domainLine}
+                                ${isCurr ? `<div class="session-detail-line current-session-indicator">${this.icons.check} <span>جلستك الحالية</span></div>` : ''}
+                            </div>
+                            <button class="terminate-btn ${isCurr ? 'icon-current' : 'icon-terminate'}" onclick="window.supabaseAuth.handleDeleteSession('${s.id}')"></button>
+                        </div>`;
                     }).join('');
 
                     localStorage.setItem("userSessionsHTMLCache", htmlContent);
                     list.innerHTML = htmlContent;
                 }
+                
+                this.startLiveDeviceSync(user);
             } catch (error) {
                 console.error('خطأ تحديث الجلسات:', error);
             }
         }
 
         escapeHtml(text) {
-            var div = document.createElement('div');
+            const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
 
         setupCrossTabSync() {
-            var self = this;
-            window.addEventListener('storage', function(event) {
-                if (event.key === 'last_uid') {
-                    if (event.newValue === null && event.oldValue !== null) {
-                        self.showGuestUI();
-                    } else if (event.newValue !== event.oldValue && event.newValue !== null) {
-                        location.reload();
-                    }
+            window.addEventListener('storage', (event) => {
+                if (event.key === 'last_uid' && event.newValue !== event.oldValue && event.newValue !== null) {
+                    location.reload();
                 }
             });
         }
 
         setupBeforeUnload() {
-            var self = this;
-            window.addEventListener('beforeunload', function() {
-                if (self.channel) {
-                    try { self.supabase.removeChannel(self.channel); } catch (e) {}
+            window.addEventListener('beforeunload', () => {
+                if (this.channel) {
+                    try { this.supabase.removeChannel(this.channel); } catch (e) {}
                 }
-                if (self.globalChannel) {
-                    try { self.supabase.removeChannel(self.globalChannel); } catch (e) {}
+                if (this.globalChannel) {
+                    try { this.supabase.removeChannel(this.globalChannel); } catch (e) {}
                 }
             });
         }
 
         bindUserActions() {
-            var self = this;
-            document.addEventListener('click', function(e) {
-                var target = e.target.closest('button, a, #logout-btn');
+            document.addEventListener('click', (e) => {
+                const target = e.target.closest('button, a, #logout-btn');
                 if (!target) return;
 
-                if (target.id === "logout-btn" || (target.innerText && target.innerText.indexOf("الخروج") !== -1)) {
+                if (target.id === "logout-btn" || target.innerText.includes("الخروج")) {
                     e.preventDefault();
-                    self.localLogout();
+                    this.localLogout();
                     return;
                 }
 
-                // تجاهل Google One Tap
+                // === إصلاح: تجاهل Google One Tap ===
                 if (target.closest('#credential_picker_container') || target.closest('[data-g-id]')) {
                     return;
                 }
 
-                // أزرار تسجيل الدخول
-                if (target.id === "google-signin-btn-popup" || (target.innerText && target.innerText.indexOf("Google") !== -1)) {
+                // === إصلاح: التعرف على أزرار تسجيل الدخول ===
+                if (target.id === "google-signin-btn-popup" || target.innerText.includes("Google")) {
                     e.preventDefault();
-                    self.loginWithGoogle();
+                    this.supabase.auth.signInWithOAuth({
+                        provider: 'google',
+                        options: { redirectTo: window.location.origin }
+                    }).catch(error => {
+                        console.error('خطأ تسجيل الدخول:', error);
+                    });
                     return;
                 }
                 
-                if (target.id === "github-signin-btn" || (target.innerText && target.innerText.indexOf("GitHub") !== -1)) {
+                if (target.id === "github-signin-btn" || target.innerText.includes("GitHub")) {
                     e.preventDefault();
-                    self.loginWithGitHub();
+                    this.supabase.auth.signInWithOAuth({
+                        provider: 'github',
+                        options: { redirectTo: window.location.origin }
+                    }).catch(error => {
+                        console.error('خطأ تسجيل الدخول:', error);
+                    });
                     return;
                 }
             }, true);
         }
 
-        loginWithGoogle() {
-            this.supabase.auth.signInWithOAuth({
-                provider: 'google',
-                options: { redirectTo: window.location.origin }
-            });
-        }
-
-        loginWithGitHub() {
-            this.supabase.auth.signInWithOAuth({
-                provider: 'github',
-                options: { redirectTo: window.location.origin }
-            });
-        }
-
         async localLogout() {
             try {
-                var sid = localStorage.getItem("supabaseSessionId");
+                const sid = localStorage.getItem("supabaseSessionId");
                 if (sid) {
                     await this.supabase.from('sessions').delete().eq('id', sid);
                 }
-                
-                this.clearCache();
-                this.showGuestUI();
-                
                 await this.supabase.auth.signOut({ scope: 'local' });
-                
-                var isAcc = window.location.pathname.indexOf(this.config.paths.account) !== -1;
+                this.handleSmartRedirect();
+            } catch (error) {
+                this.handleSmartRedirect();
+            }
+        }
+
+        handleSmartRedirect() {
+            try {
+                localStorage.clear();
+                sessionStorage.clear();
+                const isAcc = window.location.pathname.includes(this.config.paths.account);
                 if (isAcc) {
                     window.location.href = this.config.paths.login;
                 } else {
@@ -355,27 +475,18 @@
             }
         }
 
-        handleSmartRedirect() {
-            var isAcc = window.location.pathname.indexOf(this.config.paths.account) !== -1;
-            if (isAcc) {
-                window.location.href = this.config.paths.login;
-            } else {
-                location.reload();
-            }
-        }
-
         getDeviceFingerprint() {
             try {
-                var canvas = document.createElement('canvas');
-                var ctx = canvas.getContext('2d');
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
                 ctx.textBaseline = 'top';
                 ctx.font = '14px Arial';
                 ctx.fillStyle = '#f60';
                 ctx.fillRect(125, 1, 62, 20);
                 ctx.fillStyle = '#069';
                 ctx.fillText('FP', 2, 15);
-                var canvasData = canvas.toDataURL();
-                var fpData = [
+                const canvasData = canvas.toDataURL();
+                const fpData = [
                     navigator.userAgent, navigator.language,
                     navigator.languages ? navigator.languages.join(',') : '',
                     screen.colorDepth, screen.width + 'x' + screen.height,
@@ -384,9 +495,9 @@
                     navigator.deviceMemory || 0, navigator.maxTouchPoints || 0,
                     canvasData.substring(0, 100)
                 ].join('|');
-                var hash = 0;
-                for (var i = 0; i < fpData.length; i++) {
-                    var char = fpData.charCodeAt(i);
+                let hash = 0;
+                for (let i = 0; i < fpData.length; i++) {
+                    const char = fpData.charCodeAt(i);
                     hash = ((hash << 5) - hash) + char;
                     hash = hash & hash;
                 }
@@ -398,10 +509,11 @@
 
         async handleSessionSync(user) {
             try {
-                var fingerprint = this.getDeviceFingerprint();
-                var os = this.getOS();
+                localStorage.setItem("last_uid", user.id);
+                const fingerprint = this.getDeviceFingerprint();
+                const os = this.getOS();
                 
-                var { data: existingSessions } = await this.supabase
+                const { data: existingSessions } = await this.supabase
                     .from('sessions')
                     .select('id, fingerprint')
                     .eq('user_id', user.id)
@@ -409,18 +521,18 @@
                     .limit(1);
 
                 if (existingSessions && existingSessions.length > 0) {
-                    var sessionId = existingSessions[0].id;
-                    var ip = await this.fetchIP();
-                    var domain = window.location.hostname;
+                    const sessionId = existingSessions[0].id;
+                    const ip = await this.fetchIP();
+                    const domain = window.location.hostname;
                     await this.supabase.from('sessions').update({ 
                         last_active: new Date().toISOString(),
                         ip: ip, domain: domain, os: os
                     }).eq('id', sessionId);
                     localStorage.setItem("supabaseSessionId", sessionId);
                 } else {
-                    var ip = await this.fetchIP();
-                    var domain = window.location.hostname;
-                    var { data: newSession, error } = await this.supabase.from('sessions').insert([{
+                    const ip = await this.fetchIP();
+                    const domain = window.location.hostname;
+                    const { data: newSession, error } = await this.supabase.from('sessions').insert([{
                         user_id: user.id, os: os, ip: ip,
                         domain: domain, fingerprint: fingerprint,
                         last_active: new Date().toISOString()
@@ -436,7 +548,6 @@
 
         startLiveDeviceSync(user) {
             try {
-                var self = this;
                 if (this.channel) this.supabase.removeChannel(this.channel);
 
                 this.channel = this.supabase.channel('sync')
@@ -444,13 +555,13 @@
                         event: '*',
                         schema: 'public',
                         table: 'sessions',
-                        filter: 'user_id=eq.' + user.id
-                    }, function(payload) {
-                        var sid = localStorage.getItem("supabaseSessionId");
+                        filter: `user_id=eq.${user.id}`
+                    }, (payload) => {
+                        const sid = localStorage.getItem("supabaseSessionId");
                         if (payload.eventType === 'DELETE' && payload.old && payload.old.id === sid) {
-                            self.handleSmartRedirect();
+                            this.handleSmartRedirect();
                         } else {
-                            self.refreshSessionsUI(user, true);
+                            this.refreshSessionsUI(user, true);
                         }
                     })
                     .subscribe();
@@ -461,20 +572,20 @@
 
         startGlobalSessionMonitoring(user) {
             try {
-                var self = this;
-                var sid = localStorage.getItem("supabaseSessionId");
+                const sid = localStorage.getItem("supabaseSessionId");
                 if (!sid) return;
 
                 if (this.globalChannel) this.supabase.removeChannel(this.globalChannel);
 
-                this.globalChannel = this.supabase.channel('session-monitor-' + sid)
+                this.globalChannel = this.supabase.channel(`session-monitor-${sid}`)
                     .on('postgres_changes', {
                         event: 'DELETE',
                         schema: 'public',
                         table: 'sessions',
-                        filter: 'id=eq.' + sid
-                    }, function() {
-                        self.handleSmartRedirect();
+                        filter: `id=eq.${sid}`
+                    }, () => {
+                        console.log('تم حذف الجلسة');
+                        this.handleSmartRedirect();
                     })
                     .subscribe();
             } catch (error) {
@@ -485,26 +596,25 @@
         handleDeleteSession(id) {
             try {
                 if (this._deletingSession) return;
-                var self = this;
 
-                var sid = localStorage.getItem("supabaseSessionId");
-                var isCurrent = id === sid;
+                const sid = localStorage.getItem("supabaseSessionId");
+                const isCurrent = id === sid;
 
                 this.showModalConfirm(
-                    isCurrent ? "لا يمكن التراجع عن هذا الإجراء. أنت على وشك إلغاء جلستك الحالية، مما سيؤدي إلى تسجيل خروجك فوراً." : "إزالة هذا الجهاز؟",
-                    async function() {
-                        if (self._deletingSession) return;
-                        self._deletingSession = true;
+                isCurrent ? "خروج من هذا الجهاز؟" : "لا يمكن التراجع عن هذا الإجراء. أنت على وشك إلغاء جلستك الحالية، مما سيؤدي إلى تسجيل خروجك فوراً.",
+                    async () => {
+                        if (this._deletingSession) return;
+                        this._deletingSession = true;
 
                         try {
                             if (isCurrent) {
-                                await self.localLogout();
+                                await this.localLogout();
                             } else {
-                                var { error } = await self.supabase.from('sessions').delete().eq('id', id);
-                                if (error) console.error('فشل في الإزالة:', error);
+                                const { error } = await this.supabase.from('sessions').delete().eq('id', id);
+                                if (error) alert('فشل في الإزالة');
                             }
                         } finally {
-                            setTimeout(function() { self._deletingSession = false; }, 1000);
+                            setTimeout(() => { this._deletingSession = false; }, 1000);
                         }
                     }
                 );
@@ -515,12 +625,12 @@
 
         async fetchIP() {
             try {
-                var controller = new AbortController();
-                var timeoutId = setTimeout(function() { controller.abort(); }, 3000); 
-                var res = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000); 
+                const res = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
                 clearTimeout(timeoutId);
                 if (!res.ok) throw new Error('IP Fetch Failed');
-                var data = await res.json();
+                const data = await res.json();
                 return data.ip || "Unknown";
             } catch (error) {
                 return "Unknown";
@@ -528,10 +638,10 @@
         }
 
         showModalConfirm(msg, cb) {
-            var modal = document.getElementById("custom-confirm-modal");
-            var text = document.getElementById("custom-modal-text");
-            var confirmBtn = document.getElementById("custom-modal-confirm-btn");
-            var cancelBtn = document.getElementById("custom-modal-cancel-btn");
+            const modal = document.getElementById("custom-confirm-modal");
+            const text = document.getElementById("custom-modal-text");
+            const confirmBtn = document.getElementById("custom-modal-confirm-btn");
+            const cancelBtn = document.getElementById("custom-modal-cancel-btn");
 
             if (!modal) {
                 if (confirm(msg)) { if (cb) cb(); }
@@ -541,44 +651,47 @@
             text.textContent = msg;
             modal.classList.remove("hidden");
 
-            var newConfirmBtn = confirmBtn.cloneNode(true);
-            var newCancelBtn = cancelBtn.cloneNode(true);
+            const newConfirmBtn = confirmBtn.cloneNode(true);
+            const newCancelBtn = cancelBtn.cloneNode(true);
             confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
             cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
 
-            newConfirmBtn.onclick = async function() {
+            newConfirmBtn.onclick = async () => {
                 modal.classList.add("hidden");
                 if (cb) {
                     try { await cb(); } catch (error) {}
                 }
             };
 
-            newCancelBtn.onclick = function() {
+            newCancelBtn.onclick = () => {
                 modal.classList.add("hidden");
             };
         }
 
         setupGoogleOneTap() {
             try {
-                var self = this;
                 if (!window.google || !window.google.accounts) return;
+                if (localStorage.getItem("supabase.auth.token")) return;
 
                 google.accounts.id.initialize({
                     client_id: this.config.googleClientId,
-                    callback: async function(response) {
+                    use_fedcm_for_prompt: true,
+                    callback: async (response) => {
                         try {
-                            var { error } = await self.supabase.auth.signInWithIdToken({
+                            const { error } = await this.supabase.auth.signInWithIdToken({
                                 provider: 'google', token: response.credential
                             });
-                            if (!error) {
-                                location.reload();
+                            if (error) {
+                                console.error('Login Error:', error);
+                                // === إصلاح: إزالة alert ===
+                                return;
                             }
+                            location.reload();
                         } catch (error) {
-                            console.error('Login error:', error);
+                            console.error('Login processing error:', error);
                         }
                     },
-                    auto_select: false,
-                    cancel_on_tap_outside: true
+                    auto_select: false, cancel_on_tap_outside: false
                 });
 
                 google.accounts.id.prompt();
@@ -587,8 +700,23 @@
             }
         }
 
+        // === دالة تسجيل الدخول اليدوي (للهاتف) ===
+        loginWithGoogle() {
+            this.supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: { redirectTo: window.location.origin }
+            });
+        }
+
+        loginWithGitHub() {
+            this.supabase.auth.signInWithOAuth({
+                provider: 'github',
+                options: { redirectTo: window.location.origin }
+            });
+        }
+
         getOS() {
-            var ua = navigator.userAgent;
+            const ua = navigator.userAgent;
             if (/Android/i.test(ua)) return "أندرويد";
             if (/iPhone/i.test(ua)) return "آيفون";
             if (/iPad/i.test(ua)) return "آيباد";
