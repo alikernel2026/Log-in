@@ -603,7 +603,7 @@
         setupGoogleOneTap() {
             try {
                 if (!window.google || !window.google.accounts) return;
-                if (localStorage.getItem("last_uid")) return;
+                if (localStorage.getItem("supabase.auth.token")) return;
 
                 google.accounts.id.initialize({
                     client_id: this.config.googleClientId,
@@ -650,4 +650,5 @@
         new SupabaseAuthManager();
     }
 })();
+
 
